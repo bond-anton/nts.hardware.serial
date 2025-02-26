@@ -16,3 +16,6 @@ if __name__ == "__main__":
     print(min_conf)
     print(ser_conf)
     print(mod_conf)
+
+    print("Convert config to dictionary easily.")
+    print(ser_conf.to_dict())

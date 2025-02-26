@@ -1,5 +1,55 @@
 """
 Implementation of serial connection config interface.
+
+This module provides concrete implementations of the abstract base classes defined in
+`serial_connection_interface.py`. Each class represents a specific configuration for serial
+communication, adhering to predefined standards and protocols.
+
+The following classes are implemented:
+
+1. **SerialConnectionMinimalConfig**: Implements the minimal required configuration for serial
+   communication, including port, baudrate, bytesize, parity, and stopbits.
+
+2. **SerialConnectionConfig**: Extends `SerialConnectionMinimalConfig` by adding timeout-related
+   settings like `timeout`, `write_timeout`, and `inter_byte_timeout`.
+
+3. **ModbusSerialConnectionConfig**: Extends `SerialConnectionMinimalConfig` by adding Modbus-
+   specific settings, including the `framer` property for Modbus framing types ("RTU", "ASCII").
+
+Each class performs validation of its respective properties using helper functions from the
+`validation.py` module.
+
+Example Usage:
+>>> from nts.hardware.serial.config import SerialConnectionConfig
+>>> config = SerialConnectionConfig(port="/dev/ttyUSB0", baudrate=9600, timeout=1.0)
+>>> config.to_dict()
+{
+    "port": "/dev/ttyUSB0",
+    "baudrate": 9600,
+    "bytesize": 8,
+    "parity": "N",
+    "stopbits": 1,
+    "timeout": 1.0,
+}
+
+Classes:
+    - SerialConnectionMinimalConfig: Minimal configuration for serial communication.
+    - SerialConnectionConfig: Extended configuration with timeout settings.
+    - ModbusSerialConnectionConfig: Config for Modbus serial communication.
+
+Attributes:
+    - port (str): The name of the serial port.
+    - baudrate (int): The baud rate for serial communication.
+    - bytesize (int): The number of data bits.
+    - parity (str): The parity setting for the communication.
+    - stopbits (int): The number of stop bits used in the communication.
+    - timeout (Union[float, None]): The timeout for the serial connection in seconds.
+    - write_timeout (Union[float, None]): The write timeout for the serial connection in seconds.
+    - inter_byte_timeout (Union[float, None]): The timeout between bytes during transmission.
+    - framer (str): The Modbus framer type (e.g., "RTU", "ASCII").
+
+Methods:
+    - to_dict() -> dict: Converts the serial connection config to a dictionary.
 """
 
 from typing import Union
@@ -23,6 +73,31 @@ from .validation import (
 class SerialConnectionMinimalConfig(SerialConnectionMinimalConfigModel):
     """
     Represents the minimal config for a serial connection.
+
+    This class implements the minimal required configuration for serial communication, including
+    properties such as port, baudrate, bytesize, parity, and stopbits. Validation is performed
+    using helper functions from the `validation.py` module.
+
+    Example:
+    >>> config = SerialConnectionMinimalConfig(port="/dev/ttyUSB0", baudrate=9600)
+    >>> config.to_dict()
+    {
+        "port": "/dev/ttyUSB0",
+        "baudrate": 9600,
+        "bytesize": 8,
+        "parity": "N",
+        "stopbits": 1,
+    }
+
+    Properties:
+        port (str): The name of the serial port.
+        baudrate (int): The baud rate for serial communication.
+        bytesize (int): The number of data bits.
+        parity (str): The parity setting for the communication.
+        stopbits (int): The number of stop bits used in the communication.
+
+    Methods:
+        to_dict() -> dict: Converts the serial connection config to a dictionary.
     """
 
     # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -33,7 +108,7 @@ class SerialConnectionMinimalConfig(SerialConnectionMinimalConfigModel):
         bytesize: Union[int, None] = None,
         parity: Union[str, None] = None,
         stopbits: Union[int, None] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self._port: str = validate_port(port)
         self._baudrate = validate_baudrate(baudrate)
@@ -129,12 +204,72 @@ class SerialConnectionMinimalConfig(SerialConnectionMinimalConfigModel):
             "stopbits": self.stopbits,
         }
 
+    def __str__(self) -> str:
+        """
+        Human-readable string representation of the object.
+
+        Returns:
+            str: A readable description of the configuration.
+        """
+        return (
+            f"Serial Connection:\n"
+            f"\tPort: {self.port}\n"
+            f"\tBaudrate: {self.baudrate}\n"
+            f"\tByte Size: {self.bytesize}\n"
+            f"\tParity: {self.parity}\n"
+            f"\tStop Bits: {self.stopbits}\n"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Technical string representation useful for debugging.
+
+        Returns:
+            str: Detailed information about the configuration object.
+        """
+        return (
+            f"{self.__class__.__name__}(port={self.port}, "
+            f"baudrate={self.baudrate}, bytesize={self.bytesize}, "
+            f"parity='{self.parity}', stopbits={self.stopbits}, "
+        )
+
 
 class SerialConnectionConfig(
     SerialConnectionMinimalConfig, SerialConnectionConfigModel
 ):
     """
     Serial connection config.
+
+    This class extends `SerialConnectionMinimalConfig` by adding timeout-related settings like
+    `timeout`, `write_timeout`, and `inter_byte_timeout`. These settings determine how long the
+    system waits for various serial operations to complete.
+
+    Example:
+    >>> config = SerialConnectionConfig(port="/dev/ttyUSB0", baudrate=9600, timeout=1.0)
+    >>> config.to_dict()
+    {
+        "port": "/dev/ttyUSB0",
+        "baudrate": 9600,
+        "bytesize": 8,
+        "parity": "N",
+        "stopbits": 1,
+        "timeout": 1.0,
+        "write_timeout": None,
+        "inter_byte_timeout": None,
+    }
+
+    Properties:
+        port (str): The name of the serial port.
+        baudrate (int): The baud rate for serial communication.
+        bytesize (int): The number of data bits.
+        parity (str): The parity setting for the communication.
+        stopbits (int): The number of stop bits used in the communication.
+        timeout (Union[float, None]): The timeout for the serial connection in seconds.
+        write_timeout (Union[float, None]): The write timeout for the serial connection in seconds.
+        inter_byte_timeout (Union[float, None]): The timeout between bytes during transmission.
+
+    Methods:
+        to_dict() -> dict: Converts the serial connection config to a dictionary.
     """
 
     # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -148,7 +283,7 @@ class SerialConnectionConfig(
         timeout: Union[float, None] = None,
         write_timeout: Union[float, None] = None,
         inter_byte_timeout: Union[float, None] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(port, baudrate, bytesize, parity, stopbits, **kwargs)
         self._timeout = validate_timeout(timeout)
@@ -204,12 +339,75 @@ class SerialConnectionConfig(
             "inter_byte_timeout": self.inter_byte_timeout,
         }
 
+    def __str__(self) -> str:
+        """
+        Human-readable string representation of the object.
+
+        Returns:
+            str: A readable description of the configuration.
+        """
+        return (
+            f"Serial Connection:\n"
+            f"\tPort: {self.port}\n"
+            f"\tBaudrate: {self.baudrate}\n"
+            f"\tByte Size: {self.bytesize}\n"
+            f"\tParity: {self.parity}\n"
+            f"\tStop Bits: {self.stopbits}\n"
+            f"\tTimeout: {self.timeout}\n"
+            f"\tWrite Timeout: {self.write_timeout}\n"
+            f"\tInter-Byte Timeout: {self.inter_byte_timeout}"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Technical string representation useful for debugging.
+
+        Returns:
+            str: Detailed information about the configuration object.
+        """
+        return (
+            f"{self.__class__.__name__}(port={self.port}, "
+            f"baudrate={self.baudrate}, bytesize={self.bytesize}, "
+            f"parity='{self.parity}', stopbits={self.stopbits}, "
+            f"timeout={self.timeout}, write_timeout={self.write_timeout}, "
+            f"inter_byte_timeout={self.inter_byte_timeout})"
+        )
+
 
 class ModbusSerialConnectionConfig(
     SerialConnectionMinimalConfig, ModbusSerialConnectionConfigModel
 ):
     """
     Modbus serial connection config.
+
+    This class extends `SerialConnectionMinimalConfig` by adding Modbus-specific settings, including
+    the `framer` property for Modbus framing types ("RTU", "ASCII"). Additionally, it supports
+    timeout settings similar to `SerialConnectionConfig`.
+
+    Example:
+    >>> config = ModbusSerialConnectionConfig(port="/dev/ttyUSB0", baudrate=9600, framer="RTU")
+    >>> config.to_dict()
+    {
+        "port": "/dev/ttyUSB0",
+        "baudrate": 9600,
+        "bytesize": 8,
+        "parity": "N",
+        "stopbits": 1,
+        "timeout": None,
+        "framer": "RTU",
+    }
+
+    Properties:
+        port (str): The name of the serial port.
+        baudrate (int): The baud rate for serial communication.
+        bytesize (int): The number of data bits.
+        parity (str): The parity setting for the communication.
+        stopbits (int): The number of stop bits used in the communication.
+        timeout (Union[float, None]): The timeout for the serial connection in seconds.
+        framer (str): The Modbus framer type (e.g., "RTU", "ASCII").
+
+    Methods:
+        to_dict() -> dict: Converts the serial connection config to a dictionary.
     """
 
     # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -222,7 +420,7 @@ class ModbusSerialConnectionConfig(
         stopbits: Union[int, None] = None,
         timeout: Union[float, None] = None,
         framer: Union[str, None] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(port, baudrate, bytesize, parity, stopbits, **kwargs)
         self._timeout = validate_timeout(timeout)
@@ -258,3 +456,34 @@ class ModbusSerialConnectionConfig(
 
     def to_dict(self) -> dict:
         return super().to_dict() | {"framer": self.framer, "timeout": self.timeout}
+
+    def __str__(self) -> str:
+        """
+        Human-readable string representation of the object.
+
+        Returns:
+            str: A readable description of the configuration.
+        """
+        return (
+            f"Serial Connection:\n"
+            f"\tPort: {self.port}\n"
+            f"\tBaudrate: {self.baudrate}\n"
+            f"\tByte Size: {self.bytesize}\n"
+            f"\tParity: {self.parity}\n"
+            f"\tStop Bits: {self.stopbits}\n"
+            f"\tTimeout: {self.timeout}\n"
+        )
+
+    def __repr__(self) -> str:
+        """
+        Technical string representation useful for debugging.
+
+        Returns:
+            str: Detailed information about the configuration object.
+        """
+        return (
+            f"{self.__class__.__name__}(port={self.port}, "
+            f"baudrate={self.baudrate}, bytesize={self.bytesize}, "
+            f"parity='{self.parity}', stopbits={self.stopbits}, "
+            f"timeout={self.timeout}"
+        )

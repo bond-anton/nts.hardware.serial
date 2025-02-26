@@ -16,9 +16,11 @@ serial communication configurations are structured and used in various applicati
 
 Classes:
     SerialConnectionMinimalConfigModel (ABC): Abstract base class for basic serial communication
-    config. SerialConnectionConfigModel (SerialConnectionMinimalConfigModel): Extended
-    serial communication config with timeout settings. ModbusSerialConnectionConfigModel
-    (SerialConnectionMinimalConfigModel): Serial communication config for Modbus protocol.
+        config.
+    SerialConnectionConfigModel (SerialConnectionMinimalConfigModel): Extended
+        serial communication config with timeout settings.
+    ModbusSerialConnectionConfigModel (SerialConnectionMinimalConfigModel): Serial communication
+        config for Modbus protocol.
 
 Usage:
     To use these models, subclass them to implement the specific behavior for each setting.

@@ -1,4 +1,35 @@
-"""Serial connection config validation routines"""
+"""
+Serial connection config validation routines.
+
+This module provides utility functions for validating various parameters used in serial connection
+configurations. Each function checks whether the given parameter meets certain criteria and raises
+an appropriate exception if validation fails. These routines help ensure that only valid values are
+used throughout the application.
+
+Functions:
+    - validate_port(port): Validates the serial port name.
+    - validate_baudrate(baudrate): Validates the baud rate.
+    - validate_bytesize(bytesize): Validates the number of data bits.
+    - validate_parity(parity): Validates the parity setting.
+    - validate_stopbits(stopbits): Validates the number of stop bits.
+    - validate_timeout(timeout): Validates the timeout value.
+    - validate_framer(framer): Validates the Modbus framer type.
+
+Raises:
+    SerialConnectionConfigError: If any of the parameters fail validation.
+
+Validation rules:
+    - Port names must be non-empty strings and at least 3 characters long.
+    - Baud rates must be integers within a predefined list of supported values.
+    - Bytesizes must be integers from a predefined list of supported values.
+    - Parities must be one of the predefined parity types ('N', 'E', 'O').
+    - Stopbits must be either 1 or 2.
+    - Timeouts must be non-negative floats or None.
+    - Framers must be one of the predefined framer types ('RTU', 'ASCII').
+
+By centralizing validation logic here, we ensure consistent enforcement of constraints across all
+configurations.
+"""
 
 from typing import Union
 
@@ -22,6 +53,8 @@ def validate_port(port: Union[str, None]) -> str:
     """
     Validate the port value.
 
+    Ensures that the port name is a non-empty string and has a minimum length of 3 characters.
+
     Args:
         port (str): Port name to validate.
 
@@ -44,6 +77,9 @@ def validate_baudrate(baudrate: Union[int, None]) -> int:
     """
     Validate the baudrate value.
 
+    Ensures that the baud rate is an integer and falls within the predefined list
+    of supported values.
+
     Args:
         baudrate (int): Baud rate to validate.
 
@@ -64,6 +100,9 @@ def validate_baudrate(baudrate: Union[int, None]) -> int:
 def validate_bytesize(bytesize: Union[int, None]) -> int:
     """
     Validate the bytesize value.
+
+    Ensures that the number of data bits is an integer and falls within the predefined list of
+    supported values.
 
     Args:
         bytesize (int): Number of data bits to validate.
@@ -86,6 +125,8 @@ def validate_parity(parity: Union[str, None]) -> str:
     """
     Validate the parity value.
 
+    Ensures that the parity setting matches one of the predefined parity types ('N', 'E', 'O').
+
     Args:
         parity (str): Parity value to validate.
 
@@ -106,6 +147,8 @@ def validate_parity(parity: Union[str, None]) -> str:
 def validate_stopbits(stopbits: Union[int, None]) -> int:
     """
     Validate the stopbits value.
+
+    Ensures that the number of stop bits is either 1 or 2.
 
     Args:
         stopbits (int): Stop bits to validate.
@@ -128,6 +171,8 @@ def validate_timeout(timeout: Union[float, None]) -> Union[float, None]:
     """
     Validate the timeout value.
 
+    Ensures that the timeout is a non-negative float or None.
+
     Args:
         timeout (Union[float, None]): Timeout value to validate.
 
@@ -148,6 +193,8 @@ def validate_timeout(timeout: Union[float, None]) -> Union[float, None]:
 def validate_framer(framer: Union[str, None]) -> str:
     """
     Validate the framer value.
+
+    Ensures that the Modbus framer type matches one of the predefined framer types ('RTU', 'ASCII').
 
     Args:
         framer (str): Framer value to validate.
