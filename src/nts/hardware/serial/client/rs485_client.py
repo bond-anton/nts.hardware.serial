@@ -1,4 +1,18 @@
-"""RS485 Client"""
+"""
+RS485 Client Module.
+
+This module provides a client implementation for communicating with Modbus devices over an RS485
+serial interface. It leverages the `pymodbus` library to handle Modbus requests and responses,
+offering a simple yet powerful way to interact with remote devices.
+
+Key Features:
+    - Supports asynchronous operations for efficient communication.
+    - Handles common Modbus commands like reading and writing registers.
+    - Facilitates logging of client activities for debugging and monitoring.
+
+This module simplifies interaction with Modbus devices over RS485, making it easier to integrate
+with industrial automation systems and IoT applications.
+"""
 
 from typing import Union, Optional
 from logging import Logger, getLogger
@@ -28,7 +42,7 @@ from ..utilities.numeric import (
 
 
 class RS485Client:
-    """RS-485 Client class"""
+    """RS485 Client."""
 
     def __init__(
         self,

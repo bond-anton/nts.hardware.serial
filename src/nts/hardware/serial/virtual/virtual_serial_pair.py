@@ -93,7 +93,9 @@ class VirtualSerialPair(VirtualSerialNetwork):
         Args:
             external_ports (List[SerialConnectionMinimalConfig]): Ignored in this context.
         """
-        self.logger.info("VSP: Adding external ports is not supported for Virtual Serial Pairs.")
+        self.logger.info(
+            "VSP: Adding external ports is not supported for Virtual Serial Pairs."
+        )
 
     def create(self, ports_num: int):
         """
@@ -117,4 +119,6 @@ class VirtualSerialPair(VirtualSerialNetwork):
         Args:
             remove_list (List[str]): Ignored in this context.
         """
-        self.logger.info("VSP: Removing ports is not supported for Virtual Serial Pairs.")
+        self.logger.info(
+            "VSP: Removing ports is not supported for Virtual Serial Pairs."
+        )
