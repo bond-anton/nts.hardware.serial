@@ -113,12 +113,15 @@ def forward_data(selector: Selector, master_files: dict, loopback: bool = False)
     for key, events in selector.select(timeout=1):
         key_fd = key.fileobj
         if events & EVENT_READ and isinstance(key_fd, int):
-            data = master_files[key_fd].read()
-            # Write to master files.
-            # If loopback is False, don't write to the sending file.
-            for fd, f in master_files.items():
-                if loopback or fd != key_fd:
-                    f.write(data)
+            try:
+                data = master_files[key_fd].read()
+                # Write to master files.
+                # If loopback is False, don't write to the sending file.
+                for fd, f in master_files.items():
+                    if loopback or fd != key_fd:
+                        f.write(data)
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
 
 
 # pylint: disable=too-many-positional-arguments

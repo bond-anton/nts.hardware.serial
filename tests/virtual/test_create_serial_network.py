@@ -128,8 +128,6 @@ def test_communication_thread():
     response = parent_conn2.recv()
     assert response["status"] == "OK"
 
-    print(serial_ports, serial_ports2)
-
     # Open the first serial port for writing
     with open(serial_ports[0], "wb", buffering=0) as port1:
         # Open the second serial port for reading
