@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nts.hardware.serial"
+dynamic = ["version"]
+description = "Serial communication library"
+authors = [
+  { name = "Anton Bondarenko", email = "bond.anton@gmail.com" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "pyserial",
+    "pymodbus[serial]"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/bond-anton/nts.hardware.serial"
+"Bug Tracker" = "https://github.com/bond-anton/nts.hardware.serial/issues"
+
+[project.optional-dependencies]
+dev = []
+test = ["flake8", "pytest", "pytest-asyncio"]
+lint = ["pylint"]
+
+[tool.setuptools.dynamic]
+version = {attr = "nts.hardware.serial.version.__version__"}
+
+[tool.mypy]
+python_version = "3.9"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
