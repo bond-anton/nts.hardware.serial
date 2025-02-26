@@ -1,4 +1,34 @@
-"""Virtual serial port network creation"""
+"""
+Virtual serial port network creation.
+
+This module provides a high-level abstraction for managing a virtual network of serial ports.
+It allows the creation, addition, and removal of virtual and external serial ports, enabling
+seamless interaction between simulated and real-world devices.
+
+Classes:
+    - VirtualSerialNetwork: Manages the lifecycle of a virtual serial port network, including
+      starting, stopping, adding, creating, and removing ports.
+
+Functions:
+    - _ext_ports_remove_duplicates(self): Removes duplicate entries from the list of external
+      ports.
+    - _update_ext_ports(self, ports_connected: List[str]): Updates the list of external ports after
+      successful connection attempts.
+
+Attributes:
+    - virtual_ports_num (int): The number of virtual ports currently active in the network.
+    - external_ports (List[SerialConnectionMinimalConfig]): List of external serial ports
+      configured for integration into the virtual network.
+    - serial_ports (List[str]): Combined list of all active ports (both virtual and external) in
+      the network.
+    - loopback (bool): Flag indicating whether loopback mode is enabled. In this mode, data sent
+      from a port is also received by itself.
+    - logger (logging.Logger): Logging handler for recording debug, info, warning, and error
+      messages.
+
+This class encapsulates the complexity of managing multiple serial ports, allowing users to focus
+on higher-level tasks such as simulating device behavior or integrating external hardware.
+"""
 
 from typing import Union, List, Optional, Callable
 from multiprocessing import Pipe, Process
@@ -11,7 +41,34 @@ from ..config import SerialConnectionMinimalConfig
 
 # pylint: disable=too-many-instance-attributes
 class VirtualSerialNetwork:
-    """A virtual serial port network management."""
+    """
+    A virtual serial port network management.
+
+    This class serves as a high-level API for creating, managing, and interacting with a virtual
+    network of serial ports. It handles the initialization, addition, and removal of both virtual
+    and external serial ports, providing a unified interface for controlling these operations.
+
+    Attributes:
+        virtual_ports_num (int): The number of virtual ports initially requested when the network
+            starts.
+        external_ports (List[SerialConnectionMinimalConfig]): A list of external serial ports that
+            can be integrated into the virtual network.
+        serial_ports (List[str]): A combined list of all active ports (both virtual and external)
+            in the network.
+        loopback (bool): Determines whether loopback mode is enabled. In loopback mode, data sent
+            from a port is also received by itself.
+        logger (Logger): A logging handler for recording debug, info, warning, and error messages
+            related to the virtual network's operation.
+
+    Methods:
+        start(self, openpty_func=None): Starts the virtual serial network and initializes
+            communication.
+        stop(self): Stops the virtual serial network and cleans up resources.
+        add(self, external_ports: List[SerialConnectionMinimalConfig]): Adds external serial ports
+            to the network.
+        create(self, ports_num: int): Creates additional virtual ports in the network.
+        remove(self, remove_list: List[str]): Removes specified ports from the network.
+    """
 
     def __init__(
         self,
@@ -20,6 +77,19 @@ class VirtualSerialNetwork:
         loopback: bool = False,
         logger: Optional[Logger] = None,
     ) -> None:
+        """
+        Initializes the VirtualSerialNetwork instance.
+
+        Args:
+            virtual_ports_num (int, optional): The initial number of virtual ports to create.
+                Defaults to 2.
+            external_ports (Optional[List[SerialConnectionMinimalConfig]], optional): A list
+                of external serial ports to integrate into the virtual network. Defaults to None.
+            loopback (bool, optional): Enables loopback mode where data sent from a port is also
+                received by itself. Defaults to False.
+            logger (Optional[Logger], optional): A logging handler for recording operational
+                information. Defaults to a basic logger if none is provided.
+        """
         self.__master_io: Optional[Connection] = None
         self.__worker_io: Optional[Connection] = None
         self.__p: Union[Process, None] = None
@@ -34,7 +104,20 @@ class VirtualSerialNetwork:
         self.logger: Logger = logger if isinstance(logger, Logger) else getLogger()
 
     def start(self, openpty_func: Optional[Callable] = None):
-        """Start the virtual serial network and initialize communication."""
+        """
+        Start the virtual serial network and initialize communication.
+
+        This method initiates the virtual network by spawning a separate process (`worker`)
+        responsible for managing the ports. Once started, the network begins listening for commands
+        and data.
+
+        Args:
+            openpty_func (Optional[Callable], optional): An alternative function for opening
+                pseudo-terminal pairs. Defaults to `pty.openpty`.
+
+        Raises:
+            RuntimeError: If the network is already running.
+        """
         self.logger.debug("VSN: STARTING")
         self.__master_io, self.__worker_io = Pipe()
         external_ports = None
@@ -77,7 +160,11 @@ class VirtualSerialNetwork:
         self.logger.info("VSN: %s", self.serial_ports)
 
     def _ext_ports_remove_duplicates(self):
-        """Remove duplicates from external ports list."""
+        """
+        Removes duplicate entries from the list of external ports.
+
+        Duplicate ports are identified by comparing their `port` attributes.
+        """
         new_external_ports_list = []
         for port_params in self.external_ports:
             duplicate = False
@@ -90,7 +177,14 @@ class VirtualSerialNetwork:
         self.external_ports = new_external_ports_list
 
     def _update_ext_ports(self, ports_connected: List[str]):
-        """Update external ports list."""
+        """
+        Updates the list of external ports after successful connection attempts.
+
+        Only those external ports that were successfully connected remain in the updated list.
+
+        Args:
+            ports_connected (List[str]): List of successfully connected external ports.
+        """
         new_external_ports_list = []
         for port_params in self.external_ports:
             for port_name in ports_connected:
@@ -100,7 +194,12 @@ class VirtualSerialNetwork:
         self.external_ports = new_external_ports_list
 
     def stop(self):
-        """Stop the virtual serial network."""
+        """
+        Stop the virtual serial network.
+
+        Sends a stop signal to the worker process, waits for termination, and cleans up all
+            resources.
+        """
         if self.__p is not None:
             self.logger.debug("VSN: STOPPING")
             self.__master_io.send({"cmd": "stop"})
@@ -112,7 +211,16 @@ class VirtualSerialNetwork:
             self.logger.info("VSN: STOPPED")
 
     def add(self, external_ports: List[SerialConnectionMinimalConfig]):
-        """Add external ports to the network."""
+        """
+        Add external ports to the network.
+
+        Attempts to connect each provided external port to the virtual network.
+        Successfully connected ports are appended to the internal lists.
+
+        Args:
+            external_ports (List[SerialConnectionMinimalConfig]): List of external serial ports
+                to add.
+        """
         if self.__master_io is not None:
             ext_ports = [
                 con_params.to_dict() for con_params in list(set(external_ports))
@@ -136,7 +244,15 @@ class VirtualSerialNetwork:
             self.serial_ports = list(set(self.serial_ports))
 
     def create(self, ports_num: int):
-        """Create new virtual ports in the network."""
+        """
+        Create new virtual ports in the network.
+
+        Requests the creation of additional virtual ports, increasing the total number of available
+        virtual ports in the network.
+
+        Args:
+            ports_num (int): Number of new virtual ports to create.
+        """
         if self.__master_io is not None:
             self.__master_io.send({"cmd": "create", "data": ports_num})
             for _ in range(ports_num):
@@ -148,7 +264,15 @@ class VirtualSerialNetwork:
                     self.virtual_ports_num += 1
 
     def remove(self, remove_list: List[str]):
-        """Remove port from the network."""
+        """
+        Remove port from the network.
+
+        Unregisters and closes the specified ports, effectively removing them
+        from the virtual network.
+
+        Args:
+            remove_list (List[str]): List of ports to remove from the network.
+        """
         if self.__master_io is not None:
             self.__master_io.send({"cmd": "remove", "data": remove_list})
             removed_ports = []
