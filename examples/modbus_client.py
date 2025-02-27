@@ -1,3 +1,5 @@
+"""Example of RS485Client class usage."""
+
 import asyncio
 from nts.hardware.serial import (
     VirtualSerialPair,

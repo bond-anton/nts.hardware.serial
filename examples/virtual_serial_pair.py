@@ -1,3 +1,5 @@
+"""Example of VirtualSerialPair class usage."""
+
 from nts.hardware.serial import VirtualSerialPair
 
 if __name__ == "__main__":

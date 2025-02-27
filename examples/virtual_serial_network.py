@@ -1,3 +1,5 @@
+"""Example of VirtualSerialNetwork class usage."""
+
 from nts.hardware.serial import VirtualSerialNetwork, SerialConnectionConfig
 
 if __name__ == "__main__":
