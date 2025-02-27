@@ -1,21 +1,11 @@
 """Example of SerialConnectionConfig class usage."""
 
-from nts.hardware.serial.config.serial_connection_implementation import (
-    SerialConnectionMinimalConfig,
-    SerialConnectionConfig,
-    ModbusSerialConnectionConfig,
-)
+from nts.hardware.serial import SerialConnectionConfig, ModbusSerialConnectionConfig
 
+ser_conf = SerialConnectionConfig(port="/dev/ttyS01")
+ser_conf.baudrate = 9600
+ser_conf.timeout = 1.0
+print(ser_conf)
 
-min_conf = SerialConnectionMinimalConfig(port="COM1", bytesize=7, parity="N")
-ser_conf = SerialConnectionConfig(port="COM1", bytesize=7, write_timeout=1.0)
-mod_conf = ModbusSerialConnectionConfig(port="COM1")
-
-
-if __name__ == "__main__":
-    print(min_conf)
-    print(ser_conf)
-    print(mod_conf)
-
-    print("Convert config to dictionary easily.")
-    print(ser_conf.to_dict())
+modbus_conf = ModbusSerialConnectionConfig(**ser_conf.to_dict())
+print(modbus_conf)

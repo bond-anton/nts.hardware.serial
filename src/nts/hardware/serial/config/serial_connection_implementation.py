@@ -212,7 +212,7 @@ class SerialConnectionMinimalConfig(SerialConnectionMinimalConfigModel):
             str: A readable description of the configuration.
         """
         return (
-            f"Serial Connection:\n"
+            f"Serial Connection Config:\n"
             f"\tPort: {self.port}\n"
             f"\tBaudrate: {self.baudrate}\n"
             f"\tByte Size: {self.bytesize}\n"
@@ -347,7 +347,7 @@ class SerialConnectionConfig(
             str: A readable description of the configuration.
         """
         return (
-            f"Serial Connection:\n"
+            f"Serial Connection Config:\n"
             f"\tPort: {self.port}\n"
             f"\tBaudrate: {self.baudrate}\n"
             f"\tByte Size: {self.bytesize}\n"
@@ -465,7 +465,7 @@ class ModbusSerialConnectionConfig(
             str: A readable description of the configuration.
         """
         return (
-            f"Serial Connection:\n"
+            f"Modbus Connection Config:\n"
             f"\tPort: {self.port}\n"
             f"\tBaudrate: {self.baudrate}\n"
             f"\tByte Size: {self.bytesize}\n"
