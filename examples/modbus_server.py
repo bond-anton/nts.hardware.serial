@@ -1,5 +1,9 @@
 import asyncio
-from nts.hardware.serial import VirtualSerialPair, RS485Server, ModbusSerialConnectionConfig
+from nts.hardware.serial import (
+    VirtualSerialPair,
+    RS485Server,
+    ModbusSerialConnectionConfig,
+)
 
 
 async def main():

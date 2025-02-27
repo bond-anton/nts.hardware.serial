@@ -1,5 +1,11 @@
 import asyncio
-from nts.hardware.serial import VirtualSerialPair, RS485Server, RS485Client, ModbusSerialConnectionConfig
+from nts.hardware.serial import (
+    VirtualSerialPair,
+    RS485Server,
+    RS485Client,
+    ModbusSerialConnectionConfig,
+)
+
 
 async def main():
     vsp = VirtualSerialPair()
@@ -24,6 +30,7 @@ async def main():
 
     await server.stop()
     vsp.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -8,9 +8,7 @@ if __name__ == "__main__":
     vsn2 = VirtualSerialNetwork(virtual_ports_num=2)
     vsn2.start()
 
-    vsn2.add(
-        [SerialConnectionConfig(vsn1.serial_ports[0])]
-    )
+    vsn2.add([SerialConnectionConfig(vsn1.serial_ports[0])])
 
     # Create two more virtual ports
     vsn1.create(2)
