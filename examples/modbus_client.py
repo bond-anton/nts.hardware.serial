@@ -10,6 +10,7 @@ from nts.hardware.serial import (
 
 
 async def main():
+    """The main function"""
     vsp = VirtualSerialPair()
     vsp.start()
 
