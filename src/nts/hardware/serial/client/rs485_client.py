@@ -36,6 +36,7 @@ from ..utilities.numeric import (
     float_from_int,
     float_to_unsigned16,
     float_from_unsigned16,
+    float_from_unsigned32,
     combine_32bit,
     split_32bit,
 )
@@ -243,8 +244,7 @@ class RS485Client:
         signed: bool = False,
     ) -> Union[int, None]:
         """
-        Write the data value to the register using pymodbus.
-        Redefine this method for custom protocol.
+        Write integer value into two modbus registers.
         """
         if signed:
             value = from_signed32(value)
@@ -266,4 +266,28 @@ class RS485Client:
             holding=True,
             byteorder=byteorder,
             signed=signed,
+        )
+
+    async def write_two_registers_float(
+        self,
+        start_register: int,
+        value: float,
+        factor: Union[int, float] = 100,
+        byteorder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
+        signed: bool = False,
+    ) -> Union[float, None]:
+        """
+        Write float value into two modbus registers.
+        Uses provided factor to obtain int value from float.
+        """
+        value_int: int = int(round(value * factor))
+        response: Union[int, None] = await self.write_two_registers(
+            start_register, value_int, byteorder, signed
+        )
+        if response is not None:
+            if signed:
+                return float_from_unsigned32(response, factor)
+            return float_from_int(response, factor)
+        return await self.read_two_registers_float(
+            start_register, factor, signed=signed
         )

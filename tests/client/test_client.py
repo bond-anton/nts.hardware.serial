@@ -154,6 +154,20 @@ async def test_write_registers(
         start_register=0, value=-1024365, byteorder=ByteOrder.BIG_ENDIAN, signed=True
     )
     assert value == -1024365
+
+    value = await client.write_two_registers_float(
+        start_register=0, value=0.07, signed=False
+    )
+    assert value == 0.07
+    value = await client.write_two_registers_float(
+        start_register=0, value=-10000000.07, signed=True
+    )
+    assert value == -10000000.07
+    value = await client.write_two_registers_float(
+        start_register=101, value=-1.07, signed=True
+    )
+    assert value is None
+
     await rs485_srv.stop()
 
 
