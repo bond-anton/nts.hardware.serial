@@ -24,7 +24,7 @@ industrial automation and IoT applications that require scalable and reliable co
 over RS485 interfaces.
 """
 
-from typing import Union, Optional, Type
+from typing import Union, Optional
 import asyncio
 from logging import Logger, getLogger
 
@@ -89,9 +89,9 @@ class RS485Server:
             SerialConnectionConfigModel, ModbusSerialConnectionConfigModel
         ],
         slaves: Optional[dict[int, ModbusSlaveContext]] = None,
-        custom_pdu: Optional[list[Type[ModbusPDU]]] = None,
-        custom_framer: Optional[Type[FramerBase]] = None,
-        custom_decoder: Optional[Type[DecodePDU]] = None,
+        custom_pdu: Optional[list[type[ModbusPDU]]] = None,
+        custom_framer: Optional[type[FramerBase]] = None,
+        custom_decoder: Optional[type[DecodePDU]] = None,
         logger: Optional[Logger] = None,
     ):
         """
@@ -103,16 +103,16 @@ class RS485Server:
             slaves (Optional[Dict[int, ModbusSlaveContext]], optional): Mapping of slave IDs to
                 their respective ModbusSlaveContext objects. Defaults to a single slave with
                 predefined values.
-            custom_pdu (list[Type[ModbusPDU]]): Custom modbus protocol PDU list.
-            custom_framer(Type[FramerBase], optional): Custom protocol framer.
-            custom_decoder (Type[DecodePDU], optional): Custom PDU decoder for non-standard framers.
+            custom_pdu (list[type[ModbusPDU]]): Custom modbus protocol PDU list.
+            custom_framer(type[FramerBase], optional): Custom protocol framer.
+            custom_decoder (type[DecodePDU], optional): Custom PDU decoder for non-standard framers.
             logger (Optional[Logger], optional): Logging handler for recording operational
                 information. Defaults to a basic logger if none is provided.
         """
         self.slaves: dict[int, ModbusSlaveContext] = {}
-        self.custom_pdu: Optional[list[Type[ModbusPDU]]] = custom_pdu
-        self.custom_framer: Optional[Type[FramerBase]] = custom_framer
-        self.custom_decoder: Optional[Type[DecodePDU]] = custom_decoder
+        self.custom_pdu: Optional[list[type[ModbusPDU]]] = custom_pdu
+        self.custom_framer: Optional[type[FramerBase]] = custom_framer
+        self.custom_decoder: Optional[type[DecodePDU]] = custom_decoder
         if slaves is not None:
             if not isinstance(slaves, dict):
                 raise TypeError(

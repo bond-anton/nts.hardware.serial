@@ -14,7 +14,7 @@ This module simplifies interaction with Modbus devices over RS485, making it eas
 with industrial automation systems and IoT applications.
 """
 
-from typing import Union, Optional, Any, Type
+from typing import Union, Optional, Any
 from logging import Logger, getLogger
 
 from pymodbus.pdu import ModbusPDU, DecodePDU
@@ -62,11 +62,11 @@ class RS485Client:
             The slave address of the Modbus device. Defaults to 1.
         label (str, optional):
             A label for the client, used for logging and identification. Defaults to "RS485 Device".
-        custom_framer (Optional[Type[FramerBase]], optional):
+        custom_framer (Optional[type[FramerBase]], optional):
             A custom framer class for handling Modbus message framing. Defaults to None.
-        custom_decoder (Optional[Type[DecodePDU]], optional):
+        custom_decoder (Optional[type[DecodePDU]], optional):
             A custom decoder class for decoding Modbus Protocol Data Units (PDUs). Defaults to None.
-        custom_response (Optional[list[Type[ModbusPDU]]], optional):
+        custom_response (Optional[list[type[ModbusPDU]]], optional):
             A list of custom Modbus PDU response types to be registered with the client.
             Defaults to None.
         logger (Optional[Logger], optional):
@@ -94,9 +94,9 @@ class RS485Client:
         ],
         address: int = 1,
         label: str = "RS485 Device",
-        custom_framer: Optional[Type[FramerBase]] = None,
-        custom_decoder: Optional[Type[DecodePDU]] = None,
-        custom_response: Optional[list[Type[ModbusPDU]]] = None,
+        custom_framer: Optional[type[FramerBase]] = None,
+        custom_decoder: Optional[type[DecodePDU]] = None,
+        custom_response: Optional[list[type[ModbusPDU]]] = None,
         logger: Optional[Logger] = None,
     ):
         self.con_params: Union[

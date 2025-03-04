@@ -29,7 +29,7 @@ This module simplifies working with Modbus by abstracting low-level details, all
 focus on higher-level tasks such as retrieving or updating device states.
 """
 
-from typing import Optional, List, Type
+from typing import Optional, List
 import logging
 from pymodbus import ModbusException, FramerType
 from pymodbus.pdu import ModbusPDU, DecodePDU
@@ -91,9 +91,9 @@ def modbus_connection_config(con_params: SerialConnectionMinimalConfigModel) -> 
 
 def modbus_get_client(
     con_params: SerialConnectionMinimalConfigModel,
-    custom_framer: Optional[Type[FramerBase]] = None,
-    custom_decoder: Optional[Type[DecodePDU]] = None,
-    custom_response: Optional[list[Type[ModbusPDU]]] = None,
+    custom_framer: Optional[type[FramerBase]] = None,
+    custom_decoder: Optional[type[DecodePDU]] = None,
+    custom_response: Optional[list[type[ModbusPDU]]] = None,
     label: Optional[str] = None,
 ) -> AsyncModbusSerialClient:
     """
@@ -107,14 +107,14 @@ def modbus_get_client(
         con_params (SerialConnectionMinimalConfigModel):
             A model containing the minimal configuration parameters required for establishing
             a serial connection.
-        custom_framer (Optional[Type[FramerBase]]):
+        custom_framer (Optional[type[FramerBase]]):
             An optional custom framer class to be used for framing Modbus messages.
             If not provided, a default framer is selected based on the `framer` parameter
             in `con_params`.
-        custom_decoder (Optional[Type[DecodePDU]]):
+        custom_decoder (Optional[type[DecodePDU]]):
             An optional custom decoder class to be used for decoding Modbus Protocol
             Data Units (PDUs). If not provided, the default `DecodePDU` is used.
-        custom_response (Optional[list[Type[ModbusPDU]]]):
+        custom_response (Optional[list[type[ModbusPDU]]]):
             An optional list of custom Modbus PDU response types to be registered with the client.
             These are used to handle specific types of Modbus responses.
         label (Optional[str]):
