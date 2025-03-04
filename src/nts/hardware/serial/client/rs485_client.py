@@ -137,7 +137,7 @@ class RS485Client:
 
     async def read_registers(
         self, start_register: int = 0, count: int = 1, holding: bool = True
-    ) -> Union[list[int], None]:
+    ) -> Optional[list[int]]:
         """
         Read data from Modbus registers.
 
@@ -166,7 +166,7 @@ class RS485Client:
 
     async def read_register(
         self, register: int, holding: bool = True, signed: bool = False
-    ) -> Union[int, None]:
+    ) -> Optional[int]:
         """
         Read data from a single Modbus register.
 
@@ -180,11 +180,11 @@ class RS485Client:
                 If True, interprets the register value as a signed integer. Defaults to False.
 
         Returns:
-            Union[int, None]:
+            Optional[int]:
                 The register value as an integer. Returns None if an error occurs or the response
                 is invalid.
         """
-        response: Union[list[int], None] = await self.read_registers(
+        response: Optional[list[int]] = await self.read_registers(
             register, count=1, holding=holding
         )
         if response:
@@ -195,7 +195,7 @@ class RS485Client:
 
     async def write_register(
         self, register: int, value: int, signed: bool = False
-    ) -> Union[int, None]:
+    ) -> Optional[int]:
         """
         Write data to a single Modbus register.
 
@@ -208,7 +208,7 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[int, None]:
+            Optional[int]:
                 The written register value as an integer. Returns None if an error occurs or the
                 response is invalid.
         """
@@ -234,7 +234,7 @@ class RS485Client:
         factor: int = 100,
         signed: bool = False,
         holding: bool = True,
-    ) -> Union[float, None]:
+    ) -> Optional[float]:
         """
         Read and parse a float value from a single Modbus register.
 
@@ -252,10 +252,10 @@ class RS485Client:
                 Defaults to True.
 
         Returns:
-            Union[float, None]:
+            Optional[float]:
                 The parsed float value. Returns None if an error occurs or the response is invalid.
         """
-        response: Union[int, None] = await self.read_register(
+        response: Optional[int] = await self.read_register(
             register, holding=holding, signed=signed
         )
         if response:
@@ -264,7 +264,7 @@ class RS485Client:
 
     async def write_register_float(
         self, register: int, value: float, factor: int = 100, signed: bool = False
-    ) -> Union[float, None]:
+    ) -> Optional[float]:
         """
         Write a float value to a single Modbus register.
 
@@ -281,11 +281,11 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[float, None]:
+            Optional[float]:
                 The written float value. Returns None if an error occurs or the response is
                 invalid.
         """
-        response: Union[int, None] = await self.write_register(
+        response: Optional[int] = await self.write_register(
             register, float_to_unsigned16(value, factor), signed=False
         )
         if response:
@@ -300,7 +300,7 @@ class RS485Client:
         holding: bool = True,
         byteorder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
         signed: bool = False,
-    ) -> Union[int, None]:
+    ) -> Optional[int]:
         """
         Read and parse a 32-bit integer value from two Modbus registers.
 
@@ -317,11 +317,11 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[int, None]:
+            Optional[int]:
                 The parsed 32-bit integer value. Returns None if an error occurs or the response
                 is invalid.
         """
-        response: Union[list[int], None] = await self.read_registers(
+        response: Optional[list[int]] = await self.read_registers(
             start_register, count=2, holding=holding
         )
         if response and len(response) == 2:
@@ -340,7 +340,7 @@ class RS485Client:
         holding: bool = True,
         byteorder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
         signed: bool = False,
-    ) -> Union[float, None]:
+    ) -> Optional[float]:
         """
         Read and parse a float value from two Modbus registers.
 
@@ -363,7 +363,7 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[float, None]:
+            Optional[float]:
                 The parsed float value. Returns None if an error occurs or the response is invalid.
 
         Raises:
@@ -371,7 +371,7 @@ class RS485Client:
         """
         if factor == 0:
             raise ValueError("Factor cannot be zero.")
-        response: Union[int, None] = await self.read_two_registers_int(
+        response: Optional[int] = await self.read_two_registers_int(
             start_register, holding=holding, byteorder=byteorder, signed=signed
         )
         if response is not None:
@@ -385,7 +385,7 @@ class RS485Client:
         value: int,
         byteorder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
         signed: bool = False,
-    ) -> Union[int, None]:
+    ) -> Optional[int]:
         """
         Write a 32-bit integer value to two Modbus registers.
 
@@ -401,7 +401,7 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[int, None]:
+            Optional[int]:
                 The written 32-bit integer value. Returns None if an error occurs or the response
                 is invalid.
         """
@@ -434,7 +434,7 @@ class RS485Client:
         factor: Union[int, float] = 100,
         byteorder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
         signed: bool = False,
-    ) -> Union[float, None]:
+    ) -> Optional[float]:
         """
         Write a float value to two Modbus registers.
 
@@ -455,7 +455,7 @@ class RS485Client:
                 If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[float, None]:
+            Optional[float]:
                 The written float value. Returns None if an error occurs or the response is
                 invalid.
 
@@ -463,7 +463,7 @@ class RS485Client:
             ValueError: If `factor` is zero.
         """
         value_int: int = int(round(value * factor))
-        response: Union[int, None] = await self.write_two_registers(
+        response: Optional[int] = await self.write_two_registers(
             start_register, value_int, byteorder, signed
         )
         if response is not None:

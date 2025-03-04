@@ -1,7 +1,7 @@
 """Custom request test."""
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import pytest
 
@@ -66,7 +66,7 @@ class CustomASCIIFramer(FramerAscii):
         frame = self.START + dev_id + data + f"{checksum:02x}".encode() + self.END
         return frame
 
-    def _processIncomingFrame(self, data: bytes) -> tuple[int, ModbusPDU | None]:
+    def _processIncomingFrame(self, data: bytes) -> tuple[int, Union[ModbusPDU, None]]:
         """Process new packet pattern.
 
         This takes in a new request packet, adds it to the current
@@ -96,11 +96,11 @@ class CustomDecodePDU(DecodePDU):
         self.lookup: dict[int, type[base.ModbusPDU]] = {}
         self.sub_lookup: dict[int, dict[int, type[base.ModbusPDU]]] = {}
 
-    def lookupPduClass(self, data: bytes) -> type[base.ModbusPDU] | None:
+    def lookupPduClass(self, data: bytes) -> Optional[type[base.ModbusPDU]]:
         function_code = 0
         return self.lookup.get(function_code, None)
 
-    def decode(self, frame: bytes) -> base.ModbusPDU | None:
+    def decode(self, frame: bytes) -> Optional[base.ModbusPDU]:
         try:
             function_code = 0
             if not (pdu_type := self.lookup.get(function_code, None)):
@@ -241,7 +241,6 @@ async def test_custom_request_client(vsp_fixture):
         custom_decoder=CustomDecodePDU,
     )
     await server.start()
-
     client = RS485Client(
         client_config,
         address=1,
@@ -250,13 +249,8 @@ async def test_custom_request_client(vsp_fixture):
         custom_response=[CustomModbusResponse],
         label="MY TOY",
     )
-
-    # regs = await client.read_registers(0, 10, holding=True)
-    # print("READ H REGS:", regs)
-
     some_data = 123456
-    request = CustomRequest("T", data=some_data, slave=1, transaction=0)
-
+    request = CustomRequest("i", data=some_data, slave=1, transaction=0)
     # Send the request to the server
     response = await client.execute(request, no_response_expected=False)
     assert isinstance(response, CustomModbusResponse)
