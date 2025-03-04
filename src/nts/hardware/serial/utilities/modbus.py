@@ -29,9 +29,12 @@ This module simplifies working with Modbus by abstracting low-level details, all
 focus on higher-level tasks such as retrieving or updating device states.
 """
 
-from typing import Optional, Union, List
+from typing import Optional, List, Type
 import logging
 from pymodbus import ModbusException, FramerType
+from pymodbus.pdu import ModbusPDU, DecodePDU
+from pymodbus.framer import FRAMER_NAME_TO_CLASS, FramerBase
+from pymodbus.transaction import TransactionManager
 from pymodbus.client import AsyncModbusSerialClient
 
 from ..config import SerialConnectionMinimalConfigModel
@@ -78,49 +81,193 @@ def modbus_connection_config(con_params: SerialConnectionMinimalConfigModel) -> 
         params_dict["framer"] = DEFAULT_FRAMER
     if params_dict["framer"] == "RTU":
         params_dict["framer"] = FramerType.RTU
+    elif params_dict["framer"] == "ASCII":
+        params_dict["framer"] = FramerType.ASCII
     else:
+        ## Fallback framer
         params_dict["framer"] = FramerType.ASCII
     return {k: params_dict[k] for k in keys}
 
 
+def modbus_get_client(
+    con_params: SerialConnectionMinimalConfigModel,
+    custom_framer: Optional[Type[FramerBase]] = None,
+    custom_decoder: Optional[Type[DecodePDU]] = None,
+    custom_response: Optional[list[Type[ModbusPDU]]] = None,
+    label: Optional[str] = None,
+) -> AsyncModbusSerialClient:
+    """
+    Creates and configures an asynchronous Modbus serial client with optional customizations.
+
+    This function initializes an `AsyncModbusSerialClient` instance using the provided connection
+    parameters. It allows for customization of the framer, decoder, and response handling.
+    If no custom components are provided, default implementations are used.
+
+    Args:
+        con_params (SerialConnectionMinimalConfigModel):
+            A model containing the minimal configuration parameters required for establishing
+            a serial connection.
+        custom_framer (Optional[Type[FramerBase]]):
+            An optional custom framer class to be used for framing Modbus messages.
+            If not provided, a default framer is selected based on the `framer` parameter
+            in `con_params`.
+        custom_decoder (Optional[Type[DecodePDU]]):
+            An optional custom decoder class to be used for decoding Modbus Protocol
+            Data Units (PDUs). If not provided, the default `DecodePDU` is used.
+        custom_response (Optional[list[Type[ModbusPDU]]]):
+            An optional list of custom Modbus PDU response types to be registered with the client.
+            These are used to handle specific types of Modbus responses.
+        label (Optional[str]):
+            An optional label for the client. If not provided, the default label "RS485" is used.
+
+    Returns:
+        AsyncModbusSerialClient:
+            A fully configured asynchronous Modbus serial client instance, ready for communication.
+    """
+    modbus_params = modbus_connection_config(con_params)
+    if label is None:
+        label = "RS485"
+    client = AsyncModbusSerialClient(name=label, **modbus_params)
+    if custom_decoder:
+        decoder = custom_decoder(False)
+    else:
+        decoder = DecodePDU(False)
+    if custom_framer:
+        framer_instance = custom_framer(decoder)
+    else:
+        framer_instance = (FRAMER_NAME_TO_CLASS[modbus_params["framer"]])(
+            DecodePDU(False)
+        )
+    client.ctx = TransactionManager(
+        client.comm_params,
+        framer_instance,
+        retries=3,
+        is_server=False,
+        trace_packet=None,
+        trace_pdu=None,
+        trace_connect=None,
+    )
+    if custom_response:
+        for custom_response_item in custom_response:
+            client.register(custom_response_item)
+    return client
+
+
+async def modbus_execute(
+    client: AsyncModbusSerialClient,
+    request: ModbusPDU,
+    no_response_expected: bool = False,
+    logger: Optional[logging.Logger] = None,
+):
+    """
+    Executes a Modbus request asynchronously using the provided client and handles the response.
+
+    This function connects to the Modbus device, sends the request, and processes the response.
+    It handles Modbus exceptions and logs errors if a logger is provided. The connection is always
+    closed after execution, regardless of success or failure.
+
+    Args:
+        client (AsyncModbusSerialClient):
+            The asynchronous Modbus serial client used to communicate with the Modbus device.
+        request (ModbusPDU):
+            The Modbus Protocol Data Unit (PDU) representing the request to be sent to the device.
+        no_response_expected (bool, optional):
+            If True, indicates that no response is expected from the device. Defaults to False.
+        logger (Optional[logging.Logger], optional):
+            An optional logger instance for logging errors and exceptions. If not provided,
+            no logging is performed.
+
+    Returns:
+        Optional[ModbusPDU]:
+            The response from the Modbus device as a Modbus PDU. Returns None if an error occurs,
+            no response is expected, or if the client fails to connect.
+
+    Raises:
+        ModbusException:
+            If an error occurs during the execution of the Modbus request.
+
+    Notes:
+        - The function ensures that the client connection is closed after execution, even if an
+          error occurs.
+        - If `no_response_expected` is True, the function will not wait for or process a response
+          from the device.
+        - Errors and exceptions are logged if a logger is provided.
+    """
+    await client.connect()
+    if not client.connected:
+        return None
+    try:
+        response = await client.execute(no_response_expected, request)
+    except ModbusException as e:
+        if logger:
+            logger.error(
+                "%s: Modbus Exception on request execute %s",
+                client.comm_params.comm_name,
+                e,
+            )
+        return None
+    finally:
+        client.close()
+    if response.isError():
+        if logger:
+            logger.error(
+                "%s: Received exception from device (%s)",
+                client.comm_params.comm_name,
+                response,
+            )
+        return None
+    return response
+
+
 # pylint: disable=too-many-arguments, too-many-positional-arguments
 async def modbus_read_registers(
-    con_params: SerialConnectionMinimalConfigModel,
+    client: AsyncModbusSerialClient,
     start_register: int = 0,
     count: int = 1,
     slave: int = 1,
-    label: Union[str, None] = None,
-    logger: Union[logging.Logger, None] = None,
     holding: bool = True,
-) -> Union[list[int], None]:
+    logger: Optional[logging.Logger] = None,
+) -> Optional[list[int]]:
     """
-    Read input registers data.
+    Reads a sequence of Modbus registers asynchronously using the provided client.
 
-    Asynchronously reads Modbus register values, either from holding registers or input registers,
-    depending on the `holding` flag. Handles exceptions and logs errors for debugging purposes.
+    This function connects to the Modbus device, reads either holding or input registers starting
+    from the specified address, and returns the register values. It handles Modbus exceptions and
+    logs errors if a logger is provided. The connection is always closed after execution,
+    regardless of success or failure.
 
     Args:
-        con_params (SerialConnectionMinimalConfigModel): Object containing serial connection
-            parameters.
-        start_register (int, optional): Starting address of the register to read. Defaults to 0.
-        count (int, optional): Number of registers to read. Defaults to 1.
-        slave (int, optional): Slave ID of the Modbus device. Defaults to 1.
-        label (Union[str, None], optional): Label for logging purposes.
-        logger (Union[logging.Logger, None], optional): Logger instance for logging events.
-        holding (bool, optional): Whether to read from holding registers (True)
-            or input registers (False). Defaults to True.
+        client (AsyncModbusSerialClient):
+            The asynchronous Modbus serial client used to communicate with the Modbus device.
+        start_register (int, optional):
+            The starting address of the register(s) to read. Defaults to 0.
+        count (int, optional):
+            The number of registers to read. Defaults to 1.
+        slave (int, optional):
+            The slave ID of the Modbus device. Defaults to 1.
+        holding (bool, optional):
+            If True, reads holding registers. If False, reads input registers. Defaults to True.
+        logger (logging.Logger, optional):
+            An optional logger instance for logging errors and exceptions. If not provided,
+            no logging is performed.
 
     Returns:
-        Union[list[int], None]: List of register values if successful, otherwise None.
+        Optional[list[int]]:
+            A list of register values if the read operation is successful. Returns None if an
+            error occurs, the client fails to connect, or the response does not contain valid
+            register data.
 
     Raises:
-        ModbusException: If there is an issue communicating with the Modbus device.
+        ModbusException:
+            If an error occurs during the execution of the Modbus read operation.
 
     Notes:
-        - Logs any exceptions encountered during the operation.
-        - Closes the Modbus client connection after completion.
+        - The function ensures that the client connection is closed after execution, even if an
+          error occurs.
+        - Errors and exceptions are logged if a logger is provided.
+        - The function distinguishes between holding and input registers based on the `holding`
+          argument.
     """
-    client = AsyncModbusSerialClient(**modbus_connection_config(con_params))
     await client.connect()
     if not client.connected:
         return None
@@ -135,13 +282,21 @@ async def modbus_read_registers(
             )
     except ModbusException as e:
         if logger:
-            logger.error("%s: Modbus Exception on read input registers %s", label, e)
+            logger.error(
+                "%s: Modbus Exception on read input registers %s",
+                client.comm_params.comm_name,
+                e,
+            )
         return None
     finally:
         client.close()
     if response.isError():
         if logger:
-            logger.error("%s: Received exception from device (%s)", label, response)
+            logger.error(
+                "%s: Received exception from device (%s)",
+                client.comm_params.comm_name,
+                response,
+            )
         return None
     if hasattr(response, "registers"):
         return response.registers
@@ -150,142 +305,193 @@ async def modbus_read_registers(
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments
 async def modbus_read_input_registers(
-    con_params: SerialConnectionMinimalConfigModel,
+    client: AsyncModbusSerialClient,
     start_register: int = 0,
     count: int = 1,
     slave: int = 1,
-    label: Union[str, None] = None,
-    logger: Union[logging.Logger, None] = None,
+    logger: Optional[logging.Logger] = None,
 ) -> Optional[list[int]]:
     """
-    Read input registers data.
+    Reads a sequence of Modbus input registers asynchronously using the provided client.
 
-    Asynchronously reads data from Modbus input registers. This is a convenience wrapper around
-    `modbus_read_registers` with `holding=False`.
+    This function is a convenience wrapper around `modbus_read_registers` specifically for reading
+    input registers. It logs the operation if a logger is provided and delegates the actual reading
+    to `modbus_read_registers`.
 
     Args:
-        con_params (SerialConnectionMinimalConfigModel): Object containing serial connection
-            parameters.
-        start_register (int, optional): Starting address of the register to read. Defaults to 0.
-        count (int, optional): Number of registers to read. Defaults to 1.
-        slave (int, optional): Slave ID of the Modbus device. Defaults to 1.
-        label (Union[str, None], optional): Label for logging purposes.
-        logger (Union[logging.Logger, None], optional): Logger instance for logging events.
+        client (AsyncModbusSerialClient):
+            The asynchronous Modbus serial client used to communicate with the Modbus device.
+        start_register (int, optional):
+            The starting address of the input register(s) to read. Defaults to 0.
+        count (int, optional):
+            The number of input registers to read. Defaults to 1.
+        slave (int, optional):
+            The slave ID of the Modbus device. Defaults to 1.
+        logger (logging.Logger, optional):
+            An optional logger instance for logging debug information and errors. If not provided,
+            no logging is performed.
 
     Returns:
-        Optional[list[int]]: List of register values if successful, otherwise None.
+        Optional[list[int]]:
+            A list of input register values if the read operation is successful. Returns None if an
+            error occurs, the client fails to connect, or the response does not contain valid
+            register data.
 
-    See Also:
-        - `modbus_read_registers`: General-purpose register reader.
+    Notes:
+        - This function specifically reads input registers by setting `holding=False` in the
+          underlying `modbus_read_registers` call.
+        - Errors and exceptions are logged if a logger is provided.
+        - The function ensures that the client connection is closed after execution, even if
+          an error occurs.
     """
     if logger:
         logger.debug(
             "%s: Reading input registers, start: %i, count: %i",
-            label,
+            client.comm_params.comm_name,
             start_register,
             count,
         )
     return await modbus_read_registers(
-        con_params, start_register, count, slave, label, logger, holding=False
+        client,
+        start_register,
+        count,
+        slave,
+        holding=False,
+        logger=logger,
     )
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments
 async def modbus_read_holding_registers(
-    con_params: SerialConnectionMinimalConfigModel,
+    client: AsyncModbusSerialClient,
     start_register: int = 0,
     count: int = 1,
     slave: int = 1,
-    label: Union[str, None] = None,
-    logger: Union[logging.Logger, None] = None,
-) -> Union[list[int], None]:
+    logger: Optional[logging.Logger] = None,
+) -> Optional[list[int]]:
     """
-    Read holding registers data.
+    Reads a sequence of Modbus holding registers asynchronously using the provided client.
 
-    Asynchronously reads data from Modbus holding registers. This is a convenience wrapper around
-    `modbus_read_registers` with `holding=True`.
+    This function is a convenience wrapper around `modbus_read_registers` specifically for reading
+    holding registers. It logs the operation if a logger is provided and delegates the actual
+    reading to `modbus_read_registers`.
 
     Args:
-        con_params (SerialConnectionMinimalConfigModel): Object containing serial connection
-            parameters.
-        start_register (int, optional): Starting address of the register to read. Defaults to 0.
-        count (int, optional): Number of registers to read. Defaults to 1.
-        slave (int, optional): Slave ID of the Modbus device. Defaults to 1.
-        label (Union[str, None], optional): Label for logging purposes.
-        logger (Union[logging.Logger, None], optional): Logger instance for logging events.
+        client (AsyncModbusSerialClient):
+            The asynchronous Modbus serial client used to communicate with the Modbus device.
+        start_register (int, optional):
+            The starting address of the holding register(s) to read. Defaults to 0.
+        count (int, optional):
+            The number of holding registers to read. Defaults to 1.
+        slave (int, optional):
+            The slave ID of the Modbus device. Defaults to 1.
+        logger (logging.Logger, optional):
+            An optional logger instance for logging debug information and errors. If not provided,
+            no logging is performed.
 
     Returns:
-        Union[list[int], None]: List of register values if successful, otherwise None.
+        Optional[list[int]]:
+            A list of holding register values if the read operation is successful. Returns None if
+            an error occurs, the client fails to connect, or the response does not contain valid
+            register data.
 
-    See Also:
-        - `modbus_read_registers`: General-purpose register reader.
+    Notes:
+        - This function specifically reads holding registers by setting `holding=True` in the
+          underlying `modbus_read_registers` call.
+        - Errors and exceptions are logged if a logger is provided.
+        - The function ensures that the client connection is closed after execution,
+          even if an error occurs.
     """
     if logger:
         logger.debug(
             "%s: Reading holding registers, start: %i, count: %i",
-            label,
+            client.comm_params.comm_name,
             start_register,
             count,
         )
     return await modbus_read_registers(
-        con_params, start_register, count, slave, label, logger, holding=True
+        client,
+        start_register,
+        count,
+        slave,
+        holding=True,
+        logger=logger,
     )
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments
 async def modbus_write_registers(
-    con_params: SerialConnectionMinimalConfigModel,
+    client: AsyncModbusSerialClient,
     register: int,
     value: List[int],
     slave: int = 1,
-    label: Union[str, None] = None,
-    logger: Union[logging.Logger, None] = None,
-) -> Union[list[int], None]:
+    logger: Optional[logging.Logger] = None,
+) -> Optional[list[int]]:
     """
-    Write data value to registers.
+    Writes a sequence of values to Modbus holding registers asynchronously using the provided
+    client.
 
-    Asynchronously writes data to Modbus registers. This function connects to the Modbus device,
-    sends the write request, and handles any exceptions that may arise during the process.
+    This function connects to the Modbus device, writes the provided values to the specified
+    holding registers, and handles the response. It logs the operation and any errors if a logger
+    is provided. The connection is always closed after execution, regardless of success or failure.
 
     Args:
-        con_params (SerialConnectionMinimalConfigModel): Object containing serial connection
-            parameters.
-        register (int): Address of the first register to write to.
-        value (List[int]): List of integer values to write to the registers.
-        slave (int, optional): Slave ID of the Modbus device. Defaults to 1.
-        label (Union[str, None], optional): Label for logging purposes.
-        logger (Union[logging.Logger, None], optional): Logger instance for logging events.
+        client (AsyncModbusSerialClient):
+            The asynchronous Modbus serial client used to communicate with the Modbus device.
+        register (int):
+            The starting address of the holding register(s) to write to.
+        value (List[int]):
+            A list of values to write to the holding registers.
+        slave (int, optional):
+            The slave ID of the Modbus device. Defaults to 1.
+        logger (logging.Logger, optional):
+            An optional logger instance for logging debug information and errors. If not provided,
+            no logging is performed.
 
     Returns:
-        Union[list[int], None]: List of written register values if successful, otherwise None.
+        Optional[list[int]]:
+            A list of written register values if the write operation is successful. Returns None if
+            an error occurs, the client fails to connect, or the response does not contain valid
+            register data.
 
     Raises:
-        ModbusException: If there is an issue communicating with the Modbus device.
+        ModbusException:
+            If an error occurs during the execution of the Modbus write operation.
 
     Notes:
-        - Logs any exceptions encountered during the operation.
-        - Closes the Modbus client connection after completion.
+        - The function ensures that the client connection is closed after execution, even if an
+          error occurs.
+        - Errors and exceptions are logged if a logger is provided.
+        - The function writes to holding registers and expects a response containing the written
+          values.
     """
     if logger:
         logger.debug(
             "%s: Writing data to registers %i-%i",
-            label,
+            client.comm_params.comm_name,
             register,
             register + len(value),
         )
-    client = AsyncModbusSerialClient(**modbus_connection_config(con_params))
     await client.connect()
     try:
         response = await client.write_registers(register, value, slave=slave)
     except ModbusException as e:
         if logger:
-            logger.error("%s: Modbus Exception on write register %s", label, e)
+            logger.error(
+                "%s: Modbus Exception on write register %s",
+                client.comm_params.comm_name,
+                e,
+            )
         client.close()
         return None
     client.close()
     if response.isError():
         if logger:
-            logger.error("%s: Received exception from device (%s)", label, response)
+            logger.error(
+                "%s: Received exception from device (%s)",
+                client.comm_params.comm_name,
+                response,
+            )
         return None
     if hasattr(response, "registers"):
         return response.registers

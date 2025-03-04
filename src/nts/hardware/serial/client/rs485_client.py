@@ -14,16 +14,21 @@ This module simplifies interaction with Modbus devices over RS485, making it eas
 with industrial automation systems and IoT applications.
 """
 
-from typing import Union, Optional
+from typing import Union, Optional, Any, Type
 from logging import Logger, getLogger
+
+from pymodbus.pdu import ModbusPDU, DecodePDU
+from pymodbus.framer import FramerBase
+from pymodbus.client import AsyncModbusSerialClient
 
 from ..config import (
     SerialConnectionConfigModel,
     ModbusSerialConnectionConfigModel,
 )
 from ..utilities.modbus import (
-    modbus_read_input_registers,
-    modbus_read_holding_registers,
+    modbus_get_client,
+    modbus_execute,
+    modbus_read_registers,
     modbus_write_registers,
 )
 
@@ -43,8 +48,45 @@ from ..utilities.numeric import (
 
 
 class RS485Client:
-    """RS485 Client."""
+    """
+    RS485 Client for communicating with Modbus devices over an RS485 serial interface.
 
+    This class provides methods to read and write Modbus registers, handle float and integer
+    conversions, and manage communication with the device. It supports both holding and input
+    registers, as well as custom framers, decoders, and response handlers.
+
+    Args:
+        con_params (Union[SerialConnectionConfigModel, ModbusSerialConnectionConfigModel]):
+            Configuration parameters for the serial connection.
+        address (int, optional):
+            The slave address of the Modbus device. Defaults to 1.
+        label (str, optional):
+            A label for the client, used for logging and identification. Defaults to "RS485 Device".
+        custom_framer (Optional[Type[FramerBase]], optional):
+            A custom framer class for handling Modbus message framing. Defaults to None.
+        custom_decoder (Optional[Type[DecodePDU]], optional):
+            A custom decoder class for decoding Modbus Protocol Data Units (PDUs). Defaults to None.
+        custom_response (Optional[list[Type[ModbusPDU]]], optional):
+            A list of custom Modbus PDU response types to be registered with the client.
+            Defaults to None.
+        logger (Optional[Logger], optional):
+            A logger instance for logging client activities. If not provided, a default logger
+            is used.
+
+    Attributes:
+        con_params (Union[SerialConnectionConfigModel, ModbusSerialConnectionConfigModel]):
+            Configuration parameters for the serial connection.
+        client (AsyncModbusSerialClient):
+            The Modbus client instance used for communication.
+        address (int):
+            The slave address of the Modbus device.
+        label (str):
+            A label for the client, used for logging and identification.
+        logger (Logger):
+            The logger instance used for logging client activities.
+    """
+
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         con_params: Union[
@@ -52,13 +94,19 @@ class RS485Client:
         ],
         address: int = 1,
         label: str = "RS485 Device",
+        custom_framer: Optional[Type[FramerBase]] = None,
+        custom_decoder: Optional[Type[DecodePDU]] = None,
+        custom_response: Optional[list[Type[ModbusPDU]]] = None,
         logger: Optional[Logger] = None,
     ):
         self.con_params: Union[
             SerialConnectionConfigModel, ModbusSerialConnectionConfigModel
         ] = con_params
+        self.client: AsyncModbusSerialClient = modbus_get_client(
+            con_params, custom_framer, custom_decoder, custom_response, label
+        )
+
         self.address: int = address
-        self.response_delay: float = 5e-3
         self.label: str = label
         self.logger: Logger
         if logger is None:
@@ -66,26 +114,53 @@ class RS485Client:
         else:
             self.logger = logger
 
+    async def execute(
+        self, request: ModbusPDU, no_response_expected: bool = False
+    ) -> Optional[ModbusPDU]:
+        """
+        Execute a Modbus request asynchronously.
+
+        Args:
+            request (ModbusPDU):
+                The Modbus Protocol Data Unit (PDU) representing the request to be sent.
+            no_response_expected (bool, optional):
+                If True, indicates that no response is expected from the device. Defaults to False.
+
+        Returns:
+            Optional[ModbusPDU]:
+                The response from the device as a Modbus PDU. Returns None if an error occurs or
+                no response is expected.
+        """
+        return await modbus_execute(
+            self.client, request, no_response_expected, self.logger
+        )
+
     async def read_registers(
         self, start_register: int = 0, count: int = 1, holding: bool = True
     ) -> Union[list[int], None]:
         """
-        Read registers data using pymodbus.
-        Redefine this method for custom protocol.
+        Read data from Modbus registers.
+
+        Args:
+            start_register (int, optional):
+                The starting address of the register(s) to read. Defaults to 0.
+            count (int, optional):
+                The number of registers to read. Defaults to 1.
+            holding (bool, optional):
+                If True, reads holding registers; otherwise, reads input registers.
+                Defaults to True.
+
+        Returns:
+            Union[list[int], None]:
+                A list of register values if the read operation is successful. Returns None if an
+                error occurs or the response is invalid.
         """
-        if holding:
-            return await modbus_read_holding_registers(
-                self.con_params,
-                start_register=start_register,
-                count=count,
-                slave=self.address,
-                logger=self.logger,
-            )
-        return await modbus_read_input_registers(
-            self.con_params,
+        return await modbus_read_registers(
+            self.client,
             start_register=start_register,
             count=count,
             slave=self.address,
+            holding=holding,
             logger=self.logger,
         )
 
@@ -93,7 +168,21 @@ class RS485Client:
         self, register: int, holding: bool = True, signed: bool = False
     ) -> Union[int, None]:
         """
-        Read data from single register.
+        Read data from a single Modbus register.
+
+        Args:
+            register (int):
+                The address of the register to read.
+            holding (bool, optional):
+                If True, reads from holding registers; otherwise, reads from input registers.
+                Defaults to True.
+            signed (bool, optional):
+                If True, interprets the register value as a signed integer. Defaults to False.
+
+        Returns:
+            Union[int, None]:
+                The register value as an integer. Returns None if an error occurs or the response
+                is invalid.
         """
         response: Union[list[int], None] = await self.read_registers(
             register, count=1, holding=holding
@@ -108,14 +197,26 @@ class RS485Client:
         self, register: int, value: int, signed: bool = False
     ) -> Union[int, None]:
         """
-        Write the data value to the register using pymodbus.
-        Redefine this method for custom protocol.
+        Write data to a single Modbus register.
+
+        Args:
+            register (int):
+                The address of the register to write to.
+            value (int):
+                The value to write to the register.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
+
+        Returns:
+            Union[int, None]:
+                The written register value as an integer. Returns None if an error occurs or the
+                response is invalid.
         """
         if signed:
             value = from_signed16(value)
 
         response = await modbus_write_registers(
-            self.con_params,
+            self.client,
             register=register,
             value=[value],
             slave=self.address,
@@ -134,7 +235,26 @@ class RS485Client:
         signed: bool = False,
         holding: bool = True,
     ) -> Union[float, None]:
-        """Parse a float number from the register data value divided by provided factor"""
+        """
+        Read and parse a float value from a single Modbus register.
+
+        The register value is divided by the provided factor to produce the result.
+
+        Args:
+            register (int):
+                The address of the register to read.
+            factor (int, optional):
+                The divisor used to scale the integer value into a float. Defaults to 100.
+            signed (bool, optional):
+                If True, interprets the register value as a signed integer. Defaults to False.
+            holding (bool, optional):
+                If True, reads from holding registers; otherwise, reads from input registers.
+                Defaults to True.
+
+        Returns:
+            Union[float, None]:
+                The parsed float value. Returns None if an error occurs or the response is invalid.
+        """
         response: Union[int, None] = await self.read_register(
             register, holding=holding, signed=signed
         )
@@ -145,7 +265,26 @@ class RS485Client:
     async def write_register_float(
         self, register: int, value: float, factor: int = 100, signed: bool = False
     ) -> Union[float, None]:
-        """Write a float number to the register multiplied by the provided factor"""
+        """
+        Write a float value to a single Modbus register.
+
+        The float value is multiplied by the provided factor to produce the integer value to write.
+
+        Args:
+            register (int):
+                The address of the register to write to.
+            value (float):
+                The float value to write.
+            factor (int, optional):
+                The multiplier used to scale the float value into an integer. Defaults to 100.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
+
+        Returns:
+            Union[float, None]:
+                The written float value. Returns None if an error occurs or the response is
+                invalid.
+        """
         response: Union[int, None] = await self.write_register(
             register, float_to_unsigned16(value, factor), signed=False
         )
@@ -163,24 +302,24 @@ class RS485Client:
         signed: bool = False,
     ) -> Union[int, None]:
         """
-        Parse a 32-bit integer number from the data split between two registers.
+        Read and parse a 32-bit integer value from two Modbus registers.
 
         Args:
-            start_register (int): The starting register address to read from.
-            holding (bool): If True, read from holding registers;
-                            otherwise, read from input registers.
-            byteorder (ByteOrder): Byte order for combining the two registers.
-                                   Use `ByteOrder.LITTLE_ENDIAN` for little-endian
-                                   or `ByteOrder.BIG_ENDIAN` for big-endian.
-                                   Defaults to `ByteOrder.LITTLE_ENDIAN`.
-            signed (bool): Converts register value to signed int.
+            start_register (int):
+                The starting address of the registers to read.
+            holding (bool, optional):
+                If True, reads from holding registers; otherwise, reads from input registers.
+                Defaults to True.
+            byteorder (ByteOrder, optional):
+                The byte order for combining the two registers.
+                Defaults to `ByteOrder.LITTLE_ENDIAN`.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[int, None]: The parsed 32-bit integer, or None if the read operation
-                              fails or the response does not contain exactly two registers.
-
-        Raises:
-            ValueError: If an invalid `byteorder` value is provided.
+            Union[int, None]:
+                The parsed 32-bit integer value. Returns None if an error occurs or the response
+                is invalid.
         """
         response: Union[list[int], None] = await self.read_registers(
             start_register, count=2, holding=holding
@@ -203,25 +342,29 @@ class RS485Client:
         signed: bool = False,
     ) -> Union[float, None]:
         """
-        Parse a float number from the data split between two registers.
+        Read and parse a float value from two Modbus registers.
 
-        The integer value read from the registers is divided by `factor` to produce the result.
-        For example, if the register value is 31415 and `factor` is 100, the result is 314.15.
+        The integer value read from the registers is divided by the provided factor to produce
+        the result.
 
         Args:
-            start_register (int): The starting register address to read from.
-            factor (int/float): The divisor used to scale the integer value into a float.
-                                Must not be zero. Defaults to 100.
-            holding (bool): If True, read from holding registers;
-                            otherwise, read from input registers.
-            byteorder (ByteOrder): Byte order for combining the two registers.
-                                   Use `ByteOrder.LITTLE_ENDIAN` for little-endian
-                                   or `ByteOrder.BIG_ENDIAN` for big-endian.
-                                   Defaults to `ByteOrder.LITTLE_ENDIAN`.
-            signed (bool): Converts register value to signed int before conversion.
+            start_register (int):
+                The starting address of the registers to read.
+            factor (Union[int, float], optional):
+                The divisor used to scale the integer value into a float. Must not be zero.
+                Defaults to 100.
+            holding (bool, optional):
+                If True, reads from holding registers; otherwise, reads from input registers.
+                Defaults to True.
+            byteorder (ByteOrder, optional):
+                The byte order for combining the two registers.
+                Defaults to `ByteOrder.LITTLE_ENDIAN`.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
 
         Returns:
-            Union[float, None]: The parsed float, or None if the read operation fails.
+            Union[float, None]:
+                The parsed float value. Returns None if an error occurs or the response is invalid.
 
         Raises:
             ValueError: If `factor` is zero.
@@ -244,13 +387,29 @@ class RS485Client:
         signed: bool = False,
     ) -> Union[int, None]:
         """
-        Write integer value into two modbus registers.
+        Write a 32-bit integer value to two Modbus registers.
+
+        Args:
+            start_register (int):
+                The starting address of the registers to write to.
+            value (int):
+                The 32-bit integer value to write.
+            byteorder (ByteOrder, optional):
+                The byte order for splitting the value into two registers.
+                Defaults to `ByteOrder.LITTLE_ENDIAN`.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
+
+        Returns:
+            Union[int, None]:
+                The written 32-bit integer value. Returns None if an error occurs or the response
+                is invalid.
         """
         if signed:
             value = from_signed32(value)
         value_a, value_b = split_32bit(value, byteorder)
         response = await modbus_write_registers(
-            self.con_params,
+            self.client,
             register=start_register,
             value=[value_a, value_b],
             slave=self.address,
@@ -277,8 +436,31 @@ class RS485Client:
         signed: bool = False,
     ) -> Union[float, None]:
         """
-        Write float value into two modbus registers.
-        Uses provided factor to obtain int value from float.
+        Write a float value to two Modbus registers.
+
+        The float value is multiplied by the provided factor to produce the integer value to write.
+
+        Args:
+            start_register (int):
+                The starting address of the registers to write to.
+            value (float):
+                The float value to write.
+            factor (Union[int, float], optional):
+                The multiplier used to scale the float value into an integer. Must not be zero.
+                Defaults to 100.
+            byteorder (ByteOrder, optional):
+                The byte order for splitting the value into two registers.
+                Defaults to `ByteOrder.LITTLE_ENDIAN`.
+            signed (bool, optional):
+                If True, interprets the value as a signed integer. Defaults to False.
+
+        Returns:
+            Union[float, None]:
+                The written float value. Returns None if an error occurs or the response is
+                invalid.
+
+        Raises:
+            ValueError: If `factor` is zero.
         """
         value_int: int = int(round(value * factor))
         response: Union[int, None] = await self.write_two_registers(
@@ -291,3 +473,28 @@ class RS485Client:
         return await self.read_two_registers_float(
             start_register, factor, signed=signed
         )
+
+    async def read_data(self) -> dict[str, Union[int, float, list[Union[int, float]]]]:
+        """
+        Read data from the device and return it as a dictionary.
+
+        This method is intended to be overridden in subclasses to provide device-specific data.
+
+        Returns:
+            dict[str, Union[int, float, list[Union[int, float]]]:
+                A dictionary containing the data read from the device.
+        """
+        self.logger.debug("Read data request.")
+        return {}
+
+    async def process_message(self, message: dict[str, Any]):
+        """
+        Process an external message.
+
+        This method is intended to be overridden in subclasses to handle device-specific messages.
+
+        Args:
+            message (dict[str, Any]):
+                The message to process.
+        """
+        self.logger.debug("Got message %s.", message)

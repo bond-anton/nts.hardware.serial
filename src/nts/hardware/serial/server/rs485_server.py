@@ -24,7 +24,7 @@ industrial automation and IoT applications that require scalable and reliable co
 over RS485 interfaces.
 """
 
-from typing import Dict, Union, Optional
+from typing import Union, Optional, Type
 import asyncio
 from logging import Logger, getLogger
 
@@ -32,6 +32,8 @@ from pymodbus.datastore import (
     ModbusServerContext,
     ModbusSlaveContext,
 )
+from pymodbus.pdu import ModbusPDU, DecodePDU
+from pymodbus.framer import FramerBase
 from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.server import ModbusSerialServer
 
@@ -54,6 +56,7 @@ SERVER_INFO = {
 }
 
 
+# pylint: disable=too-many-instance-attributes
 class RS485Server:
     """
     RS485 Modbus Serial Server.
@@ -69,7 +72,6 @@ class RS485Server:
         con_params (Union[SerialConnectionConfigModel, ModbusSerialConnectionConfigModel]):
             Connection parameters for the server.
         logger (Logger): Logging handler for recording operational information.
-        task (Optional[asyncio.Task]): Task associated with the server execution.
         server (Optional[ModbusSerialServer]): Underlying ModbusSerialServer instance.
 
     Methods:
@@ -80,12 +82,16 @@ class RS485Server:
         - restart(self): Restarts the server after stopping it.
     """
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         con_params: Union[
             SerialConnectionConfigModel, ModbusSerialConnectionConfigModel
         ],
-        slaves: Optional[Dict[int, ModbusSlaveContext]] = None,
+        slaves: Optional[dict[int, ModbusSlaveContext]] = None,
+        custom_pdu: Optional[list[Type[ModbusPDU]]] = None,
+        custom_framer: Optional[Type[FramerBase]] = None,
+        custom_decoder: Optional[Type[DecodePDU]] = None,
         logger: Optional[Logger] = None,
     ):
         """
@@ -97,10 +103,16 @@ class RS485Server:
             slaves (Optional[Dict[int, ModbusSlaveContext]], optional): Mapping of slave IDs to
                 their respective ModbusSlaveContext objects. Defaults to a single slave with
                 predefined values.
+            custom_pdu (list[Type[ModbusPDU]]): Custom modbus protocol PDU list.
+            custom_framer(Type[FramerBase], optional): Custom protocol framer.
+            custom_decoder (Type[DecodePDU], optional): Custom PDU decoder for non-standard framers.
             logger (Optional[Logger], optional): Logging handler for recording operational
                 information. Defaults to a basic logger if none is provided.
         """
-        self.slaves: Dict[int, ModbusSlaveContext] = {}
+        self.slaves: dict[int, ModbusSlaveContext] = {}
+        self.custom_pdu: Optional[list[Type[ModbusPDU]]] = custom_pdu
+        self.custom_framer: Optional[Type[FramerBase]] = custom_framer
+        self.custom_decoder: Optional[Type[DecodePDU]] = custom_decoder
         if slaves is not None:
             if not isinstance(slaves, dict):
                 raise TypeError(
@@ -142,10 +154,18 @@ class RS485Server:
             self.server = ModbusSerialServer(
                 context=self.context,  # Data storage
                 identity=self.identity,  # server identify
+                custom_pdu=self.custom_pdu,
                 **modbus_connection_config(self.con_params),
             )
-        self._task = asyncio.create_task(self.server.serve_forever())
-        self.logger.info("Server started")
+            if self.custom_decoder:
+                self.server.decoder = self.custom_decoder(is_server=True)
+                if self.custom_pdu:
+                    for pdu in self.custom_pdu:
+                        self.server.decoder.register(pdu)
+            if self.custom_framer:
+                self.server.framer = self.custom_framer
+            self._task = asyncio.create_task(self.server.serve_forever())
+            self.logger.info("Server started")
 
     async def update_slave(self, slave_id: int, store: ModbusSlaveContext):
         """

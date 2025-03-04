@@ -28,7 +28,8 @@ from tests.fixtures import (
 
 
 # pylint: disable=redefined-outer-name
-def test_client_init(client_config, logger_fixture) -> None:
+@pytest.mark.asyncio
+async def test_client_init(client_config, logger_fixture) -> None:
     """
     Test RS485Client constructor function.
     """
