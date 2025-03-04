@@ -57,7 +57,7 @@ class CustomizedASCIIFramer(FramerAscii):
         print(f"FRAMER ENCODED FRAME: {frame}")
         return frame
 
-    def _processIncomingFrame(self, data: bytes) -> tuple[int, ModbusPDU | None]:
+    def _processIncomingFrame(self, data: bytes) -> tuple[int, Optional[ModbusPDU]]:
         """Process new packet pattern.
 
         This takes in a new request packet, adds it to the current
@@ -92,7 +92,7 @@ class CustomizedDecodePDU(DecodePDU):
         self.lookup: dict[int, type[base.ModbusPDU]] = {}
         self.sub_lookup: dict[int, dict[int, type[base.ModbusPDU]]] = {}
 
-    def lookupPduClass(self, data: bytes) -> type[base.ModbusPDU] | None:
+    def lookupPduClass(self, data: bytes) -> Optional[type[base.ModbusPDU]]:
         print("LOOKUP:", self.lookup.get(0, None))
         function_code = 0
         return self.lookup.get(function_code, None)
@@ -102,7 +102,7 @@ class CustomizedDecodePDU(DecodePDU):
         super().register(custom_class)
         print(self.lookup)
 
-    def decode(self, frame: bytes) -> base.ModbusPDU | None:
+    def decode(self, frame: bytes) -> Optional[base.ModbusPDU]:
         print(f"DECODER DECODING FRAME: {frame}")
         try:
             fun_code = 0
