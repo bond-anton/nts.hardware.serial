@@ -33,6 +33,12 @@ lint = ["pylint"]
 [tool.setuptools.dynamic]
 version = {attr = "nts.hardware.serial.version.__version__"}
 
+[tool.setuptools.package-data]
+"nts.hardware.serial" = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.mypy]
 python_version = "3.9"
 
