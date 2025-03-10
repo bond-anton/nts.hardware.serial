@@ -1,4 +1,9 @@
-"""Custom request example."""
+"""Custom request example.
+This example is just to show how one can implement custom protocol using
+`nts.hardware.serial` Server and Client abstractions and pymodbus PDU and Framer concepts.
+"""
+
+# pylint: disable=duplicate-code
 
 import asyncio
 from typing import Optional
@@ -42,7 +47,7 @@ class CustomizedASCIIFramer(FramerAscii):
             dev_id = int(data_buffer[0:3], 10)  # First 3 bytes for device (slave) id
             print(f"DATA END: {data_end}, LRC: {data_buffer[data_end - 1: data_end]}")
             lrc_in = data_buffer[data_end - 1]
-            msg = data_buffer[0:data_end - 1]
+            msg = data_buffer[0 : data_end - 1]
             len_used += data_end + 2
             print("FRAMER DECODE RAW:", data_buffer, dev_id, len_used, msg, msg[3:-1])
             if not self.check_LRC(msg, lrc_in):
