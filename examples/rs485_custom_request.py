@@ -14,6 +14,7 @@ from nts.hardware.serial.virtual import VirtualSerialPair
 from nts.hardware.serial.config import ModbusSerialConnectionConfig as Config
 from nts.hardware.serial.server import RS485Server
 from nts.hardware.serial.client import RS485Client
+from nts.hardware.serial.utilities.checksum import lrc
 
 
 class CustomizedASCIIFramer(FramerAscii):
@@ -24,6 +25,7 @@ class CustomizedASCIIFramer(FramerAscii):
 
     def decode(self, data: bytes) -> tuple[int, int, int, bytes]:
         """Customized decode ADU function."""
+        print("\n\nFRAMER DECODE")
         print(f"FRAMER DECODE DATA IN: {data}")
         len_used = 0
         len_data = len(data)
@@ -38,21 +40,26 @@ class CustomizedASCIIFramer(FramerAscii):
                 Log.debug("Incomplete frame: {} wait for more data", data, ":hex")
                 return len_used, 0, 0, self.EMPTY
             dev_id = int(data_buffer[0:3], 10)  # First 3 bytes for device (slave) id
-            lrc = int(data_buffer[data_end - 2 : data_end], 16)
-            msg = data_buffer[0 : data_end - 2]
+            print(f"DATA END: {data_end}, LRC: {data_buffer[data_end - 1: data_end]}")
+            lrc_in = data_buffer[data_end - 1]
+            msg = data_buffer[0:data_end - 1]
             len_used += data_end + 2
-            print("FRAMER DECODE RAW:", data_buffer, dev_id, len_used, msg, msg[3:])
-            if not self.check_LRC(msg[0:], lrc):
+            print("FRAMER DECODE RAW:", data_buffer, dev_id, len_used, msg, msg[3:-1])
+            if not self.check_LRC(msg, lrc_in):
+                print(f"WRONG CS FOR MSG: {msg}, LRC_IN: {lrc_in}")
                 Log.debug("LRC wrong in frame: {} skipping", data, ":hex")
-                continue
+                return len_used, 0, 0, self.EMPTY
             return len_used, dev_id, 0, msg[3:]
 
     def encode(self, data: bytes, device_id: int, _tid: int) -> bytes:
         """Customized encode ADU function."""
+        print("\n\nFRAMER ENCODE")
         print(f"FRAMER DATA IN: {data}")
         dev_id = f"{device_id:03d}".encode()  # encode device id into first 3 bytes.
-        checksum = self.compute_LRC(dev_id + data)
-        frame = self.START + dev_id + data + f"{checksum:02x}".encode() + self.END
+        # checksum = self.compute_LRC(dev_id + data)
+        checksum = lrc(dev_id + data)
+        print(f"FRAMER Checksum: {checksum}, {chr(checksum).encode()}")
+        frame = self.START + dev_id + data + chr(checksum).encode() + self.END
         print(f"FRAMER DEV ID: {dev_id}")
         print(f"FRAMER ENCODED FRAME: {frame}")
         return frame
@@ -65,16 +72,18 @@ class CustomizedASCIIFramer(FramerAscii):
         for complete messages, and once found, will process all that
         exist.
         """
+        print(f"\n\n===Processing {data}")
         Log.debug("Processing: {}", data, ":hex")
-        print(f"===Processing {data}")
         if not data:
+            print("NO DATA")
             return 0, None
         used_len, dev_id, tid, frame_data = self.decode(data)
         print(
             f"=== LEN: {used_len}, DEV_ID: {dev_id}, TR_ID: {tid}, FRAME_DATA: {frame_data}"
         )
-        if not frame_data:
-            return used_len, None
+        # if not frame_data:
+        #     print("NO FRAME DATA")
+        #     return used_len, None
         print(self.decoder)
         if (res := self.decoder.decode(frame_data)) is None:
             raise ModbusIOException("Unable to decode request")
@@ -111,17 +120,19 @@ class CustomizedDecodePDU(DecodePDU):
                 raise ModbusException(f"Unknown response {fun_code}")
             print(f"DECODER PDU TYPE: {pdu_type}")
             command: str = frame.decode()[0]
-            pdu_class = pdu_type(command=command, data=int(frame.decode()[1:]))
+            print(f"CMD: {command}, DATA: {frame[1:]}")
+            pdu_class = pdu_type(command=command, data=frame[1:])
             pdu_class.decode(frame[1:])
             Log.debug(
                 "decoded PDU function_code({} sub {}) -> {} ",
-                pdu_class.fun_code,
+                pdu_class.function_code,
                 pdu_class.sub_function_code,
                 str(pdu_class),
             )
             print(
-                f"decoded PDU function_code({pdu_class.fun_code}) -> {str(pdu_class)} "
+                f"decoded PDU function_code({pdu_class.function_code}) -> {str(pdu_class)} "
             )
+            pdu_class.registers = list(frame)[1:]
             return pdu_class
         except (ModbusException, ValueError, IndexError) as exc:
             Log.warning("Unable to decode frame {}", exc)
@@ -131,7 +142,7 @@ class CustomizedDecodePDU(DecodePDU):
 class CustomizedModbusResponse(ModbusPDU):
     """Custom modbus response."""
 
-    fun_code = 0
+    function_code = 0
 
     def __init__(
         self,
@@ -145,14 +156,14 @@ class CustomizedModbusResponse(ModbusPDU):
         self.command: str = ""
         if command is not None:
             self.command = command[0]
-        self.fun_code = self.command.encode()[0]
+        self.function_code = self.command.encode()[0]
         self.data: str = ""
         if data is not None:
             if isinstance(data, int):
                 data_trunc = int(str(data)[:6])
                 self.data = f"{data_trunc:<6d}".strip()
             else:
-                self.data = data.decode()
+                self.data = data[:6].decode()
         self.rtu_frame_size = len(self.data)
 
     def encode(self):
@@ -170,20 +181,19 @@ class CustomizedModbusResponse(ModbusPDU):
         """
         print(f"RESPONSE DECODE {data}")
         data_str = data.decode()
-        # self.command = data_str[0]
         self.data = data_str
 
 
 class CustomizedRequest(ModbusPDU):
     """Custom modbus request."""
 
-    fun_code = 0
+    # function_code = 0
     # rtu_frame_size = 0
 
     def __init__(
         self,
         command: Optional[str] = None,
-        data: Optional[int] = None,
+        data: Optional[bytes] = None,
         slave=1,
         transaction=0,
     ):
@@ -192,12 +202,13 @@ class CustomizedRequest(ModbusPDU):
         self.command: str = ""
         if command is not None:
             self.command = command[0]
-        self.fun_code = self.command.encode()[0]
-        print(f"COMMAND: {self.command}, FUN CODE: {self.fun_code}")
+        self.function_code = self.command.encode()[0]
+        print(f"COMMAND: {self.command}, FUN CODE: {self.function_code}")
         self.data: str = ""
         if data is not None:
-            data_trunc = int(str(data)[:6])
-            self.data = f"{data_trunc:<6d}".strip()
+            self.data = data[:6].decode()
+            # data_trunc = int(str(data)[:6])
+            # self.data = f"{data_trunc:<6d}".strip()
         self.rtu_frame_size = len(self.data)
 
     def encode(self):
@@ -205,7 +216,7 @@ class CustomizedRequest(ModbusPDU):
         # msg: str = self.command + self.data
         msg_bytes = self.data.encode()
         # self.function_code = int.from_bytes(msg_bytes[0])
-        print(f"REQUEST FUN CODE: {self.fun_code}")
+        print(f"REQUEST FUN CODE: {self.function_code}")
         print(f"REQUEST RTU Frame Size: {self.rtu_frame_size}")
         print(f"REQUEST ENCODED MSG: {msg_bytes}")
         return msg_bytes
@@ -220,14 +231,18 @@ class CustomizedRequest(ModbusPDU):
 
     async def update_datastore(self, context: ModbusSlaveContext) -> ModbusPDU:
         """Execute."""
-        print(f"UPD DATASTORE: {self.data}")
+        print(f"REQUEST UPD DATASTORE: {self.data}, {context}")
         _ = context
-        return CustomizedModbusResponse(
+        context.store["h"].values[:3] = [0, 1, 2]
+        print(f"STORE: {context.store["h"].values}")
+        response = CustomizedModbusResponse(
             self.command,
             self.data.encode(),
             slave=self.dev_id,
             transaction=self.transaction_id,
         )
+        response.registers = context.store["h"].values
+        return response
 
 
 async def main(server_params: Config, client_params: Config):
@@ -245,25 +260,27 @@ async def main(server_params: Config, client_params: Config):
         address=1,
         custom_framer=CustomizedASCIIFramer,
         custom_decoder=CustomizedDecodePDU,
+        # custom_response=[CustomizedRequest],
         custom_response=[CustomizedModbusResponse],
         label="MY DEVICE",
     )
 
-    some_data_int = 654321
+    some_data_int = None
     request = CustomizedRequest("T", data=some_data_int, slave=1, transaction=0)
 
     # Send the request to the server
-    response: CustomizedModbusResponse = await client.execute(
-        request, no_response_expected=False
-    )
+    response: ModbusPDU = await client.execute(request, no_response_expected=False)
+    print(f"Response: {response}")
+    print(f"Response: {response.registers}")
     print(f"Response: {response.data}")
     print(isinstance(response, CustomizedModbusResponse))
+    print(f"SERVER CTX: {server.slaves[1].store['h'].values}")
     await server.stop()
 
 
 if __name__ == "__main__":
     custom_framer = CustomizedASCIIFramer(CustomizedDecodePDU(is_server=False))
-    MY_DATA = 123456
+    MY_DATA = b"123456"
     # MY_DATA = None
     CR = CustomizedRequest("i", data=MY_DATA, slave=1, transaction=0)
     payload = CR.encode()
