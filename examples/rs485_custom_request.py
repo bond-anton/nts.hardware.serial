@@ -239,7 +239,7 @@ class CustomizedRequest(ModbusPDU):
         print(f"REQUEST UPD DATASTORE: {self.data}, {context}")
         _ = context
         context.store["h"].values[:3] = [0, 1, 2]
-        print(f"STORE: {context.store["h"].values}")
+        print(f"STORE: {context.store['h'].values}")
         response = CustomizedModbusResponse(
             self.command,
             self.data.encode(),
